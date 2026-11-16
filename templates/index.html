@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ display_language }} Sign Language Translator</title>
+    <style>
+        body{
+            background-color: #111;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2{
+            color: #fff;
+        }
+        button{
+            background-color: pink;
+            border: 0;
+            padding: 15px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        button:hover{
+            background-color: rgb(255, 176, 190);
+        }
+        button.train-btn{
+            background-color: #4CAF50;
+        }
+        button.train-btn:hover{
+            background-color: #45a049;
+        }
+        button.stop-btn{
+            background-color: #f44336;
+        }
+        button.stop-btn:hover{
+            background-color: #da190b;
+        }
+        button.speech-btn{
+            background-color: #2196F3;
+        }
+        button.speech-btn:hover{
+            background-color: #0b7dda;
+        }
+        .tabs{
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab-btn{
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border: 2px solid transparent;
+        }
+        .tab-btn.active{
+            border-bottom: 3px solid pink;
+        }
+        .tab-content{
+            display: none;
+        }
+        .tab-content.active{
+            display: block;
+        }
+        .training-panel{
+            background-color: #222;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .training-panel h2,
+        .training-panel h3,
+        .training-panel p {
+            color: #fff;
+        }
+        input[type="text"]{
+            padding: 10px;
+            margin: 10px 0;
+            width: 300px;
+            border: 2px solid #555;
+            border-radius: 5px;
+            background-color: #333;
+            color: white;
+            font-size: 16px;
+        }
+        .training-status{
+            color: #4CAF50;
+            font-size: 18px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .alphabet-menu{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .alphabet-btn{
+            padding: 10px;
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .alphabet-btn:hover{
+            background-color: pink;
+        }
+        .alphabet-btn.selected{
+            background-color: pink;
+            border-color: white;
+        }
+        .signs-display{
+            background-color: #222;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .signs-list{
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+        }
+        .sign-item{
+            background-color: #333;
+            padding: 15px;
+            border-radius: 5px;
+            border: 2px solid pink;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .speech-text{
+            background-color: #333;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            color: #00ff00;
+            font-size: 18px;
+            min-height: 40px;
+            border: 2px solid #00ff00;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: inherit;
+            resize: vertical;
+        }
+        .listening-indicator{
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: red;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #speech h2, #speech h3, #speech p {
+            color: #fff !important;
+        }
+        
+        #speech button {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<a href="/" style="color: pink;">← Choose sign language</a>
+<h1>{% if pretrained_mode %}Pre-trained {% endif %}{{ display_language }} Sign Language Translator</h1>
+{% if language == 'isl' %}
+<p style="color: white;">ISL starts untrained. Record your signs in Train before translating.
+    Add ISL reference images to the signpictures_isl folder.</p>
+{% elif pretrained_mode %}
+<p style="color: white;" id="modelStatus">{{ model_status }}</p>
+<p style="color: white;"><strong>Supported recognition vocabulary:</strong>
+    {% if supported_vocabulary %}
+        {{ supported_vocabulary|join(', ') }}
+    {% else %}
+        No signs available until a compatible model is installed.
+    {% endif %}
+</p>
+{% endif %}
+
+<div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('translate')">Translate</button>
+    <button class="tab-btn" onclick="switchTab('speech')">Speech to Sign</button>
+    {% if not pretrained_mode %}<button class="tab-btn" onclick="switchTab('train')">Train</button>{% endif %}
+</div>
+
+<!-- TRANSLATE TAB -->
+<div id="translate" class="tab-content active">
+    <img src="/video_feed?mode=translate&amp;language={{ language }}" width="800" alt="Camera feed">
+    
+    <h2 id="currentSign">
+    {% if pretrained_mode %}Recognized sign/text:{% else %}Detected:{% endif %}
+    -
+    </h2>
+    <p id="autoEntryStatus">Automatic entry is ready.</p>
+    <p>To repeat a letter, briefly show your trained half or full fist, then show the letter again.</p>
+    
+    <h2 id="sentence">
+    Sentence:
+    </h2>
+    
+    <h3>Sign Language Display:</h3>
+    <div class="signs-display">
+        <div id="translateSignsList" class="signs-list">
+            <p style="color: #999;">Signs will appear here as you build your sentence</p>
+        </div>
+    </div>
+    
+    <button onclick="addSpace()">Space</button>
+    <button onclick="backspace()">Backspace</button>
+    <button onclick="speakText()">Speak Text</button>
+    <button onclick="clearText()">Clear</button>
+</div>
+
+<!-- SPEECH TO SIGN TAB -->
+<div id="speech" class="tab-content">
+    <div class="training-panel">
+        <h2>Speech to Sign Language</h2>
+        <p>Speak text and see the signs you need to perform</p>
+        
+        <img width="800" alt="Camera feed">
+        
+        <h3>Step 1: Record Your Voice</h3>
+        <button class="speech-btn" onclick="testMicrophone()">🎙️ Test Microphone</button>
+        <button class="speech-btn" onclick="startListening()">🎤 Start Recording</button>
+        <button class="stop-btn" onclick="stopListening()">⏹ Stop Recording</button>
+        
+        <textarea class="speech-text" id="recognizedText" rows="3"
+                  placeholder="Spoken words will appear here. You can also type or edit text."
+                  oninput="recognizedText = this.value"></textarea>
+        
+        <h3>Step 2: Convert to Signs</h3>
+        <button class="speech-btn" onclick="convertToSigns()">➜ Convert to Signs</button>
+        
+        <h3>Signs to Perform:</h3>
+        <div class="signs-display">
+            <div id="signsList" class="signs-list">
+                <p style="color: #999;">Recognized signs will appear here</p>
+            </div>
+        </div>
+        
+        <h3>Practice:</h3>
+        <p style="color: #fff;">Perform the signs above in front of the camera</p>
+        
+        <h2 id="speechStatus">Ready</h2>
+        
+        <button onclick="speakRecognized()">Speak Text</button>
+        <button class="speech-btn" onclick="testSpeak()">Test Speaker</button>
+        <button onclick="clearSpeechData()">Clear</button>
+    </div>
+</div>
+
+{% if not pretrained_mode %}
+<!-- TRAIN TAB -->
+<div id="train" class="tab-content">
+    <div class="training-panel">
+        <h2>Train New Sign</h2>
+        
+        <h3>Step 1: Select or Enter Letter</h3>
+        
+        <div class="alphabet-menu" id="alphabetMenu"></div>
+        <p>To repeat letters, train Rest position using both a half fist and a full fist.</p>
+        <label><input type="checkbox" id="motionNeeded"> Motion needed (TensorFlow)</label>
+        <p>For motion signs, record one complete movement (about one second) per recording.
+           Repeat at least 3 times before training.</p>
+        
+        <p>Or enter custom:</p>
+        <input type="text" id="customLabel" placeholder="e.g., hello, thanks" maxlength="20">
+        
+        <h3>Step 2: Record Your Sign</h3>
+        <img width="800" alt="Camera feed">
+        
+        <div class="training-status" id="trainingStatus">Ready to train</div>
+        
+        <button class="train-btn" onclick="startTraining()">▶ Start Recording</button>
+        <button class="stop-btn" onclick="stopTraining()">⏹ Stop Recording</button>
+        <button class="stop-btn" onclick="deleteTrainingData()">🗑 Forget Selected Sign</button>
+        
+        <h3>Step 3: Train the AI</h3>
+        <button class="train-btn" onclick="trainModel()">🧠 Train Model</button>
+    </div>
+</div>
+{% endif %}
+
+<script>
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, options) => {
+    const url = new URL(input, window.location.href);
+    url.searchParams.set('language', APP_LANGUAGE);
+    return originalFetch(url, options);
+};
+let selectedLabel = 'A';
+let isRecording = false;
+let recognizedText = '';
+const REST_LABEL = '__rest__';
+
+// Create alphabet menu
+function createAlphabetMenu(){
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const menu = document.getElementById('alphabetMenu');
+    alphabet.forEach(letter => {
+        const btn = document.createElement('button');
+        btn.className = 'alphabet-btn' + (letter === 'A' ? ' selected' : '');
+        btn.textContent = letter;
+        btn.onclick = () => selectLabel(letter, btn);
+        menu.appendChild(btn);
+    });
+    const restButton = document.createElement('button');
+    restButton.className = 'alphabet-btn';
+    restButton.textContent = 'Rest position';
+    restButton.onclick = () => selectLabel(REST_LABEL, restButton);
+    menu.appendChild(restButton);
+}
+
+function selectLabel(label, button){
+    selectedLabel = label;
+    const custom = document.getElementById('customLabel');
+    custom.value = '';
+    
+    document.querySelectorAll('.alphabet-btn').forEach(btn => {
+        btn.classList.remove('selected');
+    });
+    button.classList.add('selected');
+    
+    updateMotionHint(label);
+    updateTrainingStatus('Selected: ' + (label === REST_LABEL ? 'Rest position (fist)' : label));
+}
+
+function switchTab(tab){
+    document.querySelectorAll('.tab-content img[alt="Camera feed"]').forEach(img => {
+        img.removeAttribute('src');
+    });
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tab).classList.add('active');
+    document.querySelector(`#${tab} img[alt="Camera feed"]`).src =
+        tab === 'translate'
+            ? `/video_feed?mode=translate&language=${APP_LANGUAGE}`
+            : `/video_feed?language=${APP_LANGUAGE}`;
+    event.target.classList.add('active');
+}
+
+function updateCurrentSign(){
+    fetch('/current_sign')
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('currentSign')
+        .textContent = (PRETRAINED_MODE ? "Recognized sign/text: " : "Detected: ") + data.sign;
+        document.getElementById('autoEntryStatus').textContent =
+            PRETRAINED_MODE && !data.model_available
+                ? 'Pre-trained recognition model not available yet.'
+                : !data.rest_trained && !PRETRAINED_MODE
+                    ? 'Automatic entry is ready. Train the rest position to repeat a letter.'
+                    : 'Automatic entry is ready.';
+    });
+}
+
+function updateSentence(){
+    fetch('/sentence')
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('sentence')
+        .innerHTML = "Sentence: " + data.sentence;
+        
+        // Update sign displays for each letter
+        displaySignsForSentence(data.sentence);
+    });
+}
+
+function displaySignsForSentence(sentence){
+    const signsList = document.getElementById('translateSignsList');
+    signsList.innerHTML = '';
+    
+    if(!sentence || sentence.length === 0){
+        signsList.innerHTML = '<p style="color: #999;">Signs will appear here as you build your sentence</p>';
+        return;
+    }
+    
+    // Get individual letters (ignore spaces)
+    const letters = sentence.split('').filter(c => c !== ' ');
+    
+    letters.forEach((letter, index) => {
+        const item = document.createElement('div');
+        item.className = 'sign-item';
+        item.textContent = letter;
+        
+        signsList.appendChild(item);
+    });
+}
+
+function addSpace(){
+    fetch('/space')
+    .then(() => updateSentence());
+}
+
+function backspace(){
+    fetch('/backspace')
+    .then(() => updateSentence());
+}
+
+function clearText(){
+    fetch('/clear')
+    .then(() => updateSentence());
+}
+
+function speakText(){
+    fetch('/speak');
+}
+
+function updateTrainingStatus(msg){
+    document.getElementById('trainingStatus').innerHTML = msg;
+}
+
+function getTrainingLabel(){
+    const custom = document.getElementById('customLabel').value.trim();
+    return custom || selectedLabel;
+}
+
+function updateMotionHint(label){
+    const checkbox = document.getElementById('motionNeeded');
+    checkbox.disabled = label.toLowerCase() === REST_LABEL;
+    checkbox.checked =
+        APP_LANGUAGE === 'asl' && ['J', 'Z'].includes(label.trim().toUpperCase());
+}
+
+function startTraining(){
+    const label = getTrainingLabel();
+    if(!label){
+        alert('Please select or enter a sign name');
+        return;
+    }
+    
+    const motion = document.getElementById('motionNeeded').checked;
+    fetch('/start_training', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label: label, motion: motion})
+    })
+    .then(async response => {
+        const data = await response.json();
+        if(!response.ok) throw new Error(data.message);
+        isRecording = true;
+        const displayLabel = label === REST_LABEL ? 'rest position (fist)' : label;
+        updateTrainingStatus(' Recording ' + displayLabel + (motion ? ' movement...' : '...'));
+    })
+    .catch(error => updateTrainingStatus(error.message));
+}
+
+function stopTraining(){
+    if(!isRecording){
+        alert('Not recording');
+        return;
+    }
+    
+    isRecording = false;
+    fetch('/stop_training', {method: 'POST'})
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === 'error') throw new Error(data.message);
+        updateTrainingStatus(data.motion
+            ? ' Recorded one movement. Repeat at least 3 times, then train.'
+            : ' Recorded ' + data.samples + ' samples!');
+    })
+    .catch(error => updateTrainingStatus(error.message));
+}
+
+function trainModel(){
+    updateTrainingStatus(' Training model...');
+    
+    fetch('/train_model', {method: 'POST'})
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === 'success'){
+            updateTrainingStatus(' Model trained! Accuracy: ' + data.accuracy + ' Samples: ' + data.samples);
+        } else {
+            updateTrainingStatus('Error: ' + data.message);
+        }
+    });
+}
+
+function deleteTrainingData(){
+    const label = getTrainingLabel();
+    const displayLabel = label === REST_LABEL ? 'rest position' : label;
+    if(!confirm(`Forget "${displayLabel}" and delete its training samples? This cannot be undone.`)){
+        return;
+    }
+
+    fetch('/delete_training_data', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({label: label})
+    })
+    .then(async response => {
+        const data = await response.json();
+        if(!response.ok){
+            throw new Error(data.message || 'Could not delete training data');
+        }
+        return data;
+    })
+    .then(data => {
+        updateTrainingStatus(
+            `Forgot ${displayLabel}: deleted ${data.removed} samples and ${data.removed_motion} motion recordings.`
+        );
+    })
+    .catch(error => {
+        updateTrainingStatus(error.message);
+    });
+}
+
+if(!PRETRAINED_MODE){
+    document.getElementById('customLabel').addEventListener('input', event => {
+        const label = event.target.value.trim() || selectedLabel;
+        updateMotionHint(label);
+    });
+}
+
+// Speech functions
+function startListening(){
+    document.getElementById('recognizedText').value = 'Listening...';
+    document.getElementById('speechStatus').innerHTML = ' Listening... (click Stop when done)';
+    
+    fetch('/start_listening', {method: 'POST'})
+    .then(() => {
+        setTimeout(checkListening, 1000);
+    });
+}
+
+function stopListening(){
+    fetch('/stop_listening', {method: 'POST'})
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('recognizedText').value = data.text || '';
+        recognizedText = data.text || '';
+        document.getElementById('speechStatus').innerHTML = ' Stopped!';
+    });
+}
+
+function testMicrophone(){
+    document.getElementById('recognizedText').value = 'Testing microphone... Speak now!';
+    
+    fetch('/test_microphone', {method: 'POST'})
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === 'success'){
+            document.getElementById('recognizedText').value = data.message;
+            document.getElementById('speechStatus').innerHTML = 'Microphone works!';
+        } else {
+            document.getElementById('recognizedText').value = data.message;
+            document.getElementById('speechStatus').innerHTML = 'Microphone error';
+        }
+    });
+}
+
+function convertToSigns(){
+    const text = document.getElementById('recognizedText').value.trim();
+    recognizedText = text;
+    if(!text){
+        alert('Please speak or enter text first');
+        return;
+    }
+    
+    fetch('/text_to_signs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: text})
+    })
+    .then(res => res.json())
+    .then(data => {
+        const signsList = document.getElementById('signsList');
+        signsList.innerHTML = '';
+        
+        if(data.signs.length === 0){
+            signsList.innerHTML = '<p style="color: #999;">No signs in text</p>';
+        } else {
+            data.signs.forEach(sign => {
+                const item = document.createElement('div');
+                item.className = 'sign-item';
+                
+                // Try to load image from signpictures folder
+                const img = document.createElement('img');
+                img.src = `/sign_image/${encodeURIComponent(sign)}?language=${APP_LANGUAGE}`;
+                img.style.width = '120px';
+                img.style.height = '120px';
+                img.style.objectFit = 'contain';
+                img.style.backgroundColor = '#333';
+                img.style.padding = '10px';
+                img.style.borderRadius = '5px';
+                
+                img.onerror = function() {
+                    // If image not found, show letter instead
+                    item.innerHTML = sign;
+                    item.style.fontSize = '28px';
+                };
+                
+                item.appendChild(img);
+                const letterLabel = document.createElement('p');
+                letterLabel.textContent = sign;
+                letterLabel.style.marginTop = '10px';
+                letterLabel.style.color = 'white';
+                item.appendChild(letterLabel);
+                
+                signsList.appendChild(item);
+            });
+        }
+        document.getElementById('speechStatus').innerHTML = ' Perform ' + data.signs.length + ' signs';
+    });
+}
+function speakRecognized(){
+    if(recognizedText){
+        fetch('/speak', {method: 'POST'});
+    }
+}
+function testSpeak(){
+    document.getElementById('speechStatus').innerHTML = '🔊 Testing speaker... Listen carefully!';
+    
+    fetch('/test_speak', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: 'Hello! This is a test of the text to speech system.'})
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('speechStatus').innerHTML = 'Speaking: ' + data.text;
+    });
+}
+function clearSpeechData(){
+    recognizedText = '';
+    document.getElementById('recognizedText').value = '';
+    document.getElementById('signsList').innerHTML = '<p style="color: #999;">Recognized signs will appear here</p>';
+    document.getElementById('speechStatus').innerHTML = 'Ready';
+}
+
+if(!PRETRAINED_MODE) createAlphabetMenu();
+
+setInterval(() => {
+    updateCurrentSign();
+    updateSentence();
+}, 500);
+
+updateCurrentSign();
+updateSentence();
+</script>
+</body>
+</html>

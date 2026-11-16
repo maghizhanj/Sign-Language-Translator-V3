@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Choose Sign Language</title>
+    <style>
+        body { background: #111; color: white; font-family: Arial, sans-serif;
+               margin: 0; padding: 40px 20px; }
+        main { max-width: 700px; margin: auto; }
+        .choice { display: block; padding: 20px; margin: 15px 0; border-radius: 6px;
+                  background: #333; color: white; text-decoration: none; }
+        .choice:hover { background: #555; }
+        a.back { color: pink; }
+    </style>
+</head>
+<body>
+<main>
+    {% if pretrained %}
+    <a class="back" href="{{ url_for('index') }}">Back to choices</a>
+    <h1>Pre-trained models</h1>
+    <p>Choose a recognition-only page. Each page uses its own model and shows the vocabulary that model supports.</p>
+    <a class="choice" href="{{ url_for('open_app', language='pretrained_asl') }}">Pre-trained ASL</a>
+    <a class="choice" href="{{ url_for('open_app', language='pretrained_isl') }}">Pre-trained ISL</a>
+    {% else %}
+    <h1>Choose sign language</h1>
+    <p>Select how you want to use the translator.</p>
+    <a class="choice" href="{{ url_for('pretrained') }}">Pre-trained</a>
+    <a class="choice" href="{{ url_for('open_app', language='isl') }}">ISL (two-handed)</a>
+    <a class="choice" href="{{ url_for('open_app', language='asl') }}">ASL (one-handed)</a>
+    {% endif %}
+</main>
+</body>
+</html>

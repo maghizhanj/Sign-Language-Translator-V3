@@ -1,0 +1,13 @@
+{
+  "model_name": "sign_language_model",
+  "num_classes": 5,
+  "classes": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "n_features": 42,
+  "timestamp": "2026-11-12T20:58:08.049917"
+}

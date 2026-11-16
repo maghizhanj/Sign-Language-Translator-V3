@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign Language Translator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f0f0f0; }
+        header { background: #2c3e50; color: white; padding: 20px; text-align: center; }
+        .container { max-width: 900px; margin: 20px auto; padding: 0 10px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+        .tab-btn { padding: 12px 20px; background: none; border: none; font-size: 14px; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab-btn.active { border-bottom-color: #3498db; color: #3498db; font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .section { margin-bottom: 20px; }
+        h3 { color: #2c3e50; margin-bottom: 15px; font-size: 16px; }
+        .mode-btns { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .mode-btn { padding: 8px 15px; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 3px; cursor: pointer; font-size: 13px; }
+        .mode-btn.active { background: #3498db; color: white; border-color: #3498db; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 5px 0 10px 0; border: 1px solid #ddd; border-radius: 3px; font-size: 13px; }
+        textarea { resize: vertical; min-height: 80px; }
+        button { padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px; margin-right: 10px; }
+        button:hover { background: #2980b9; }
+        button.danger { background: #e74c3c; }
+        button.success { background: #27ae60; }
+        .output { background: #f8f9fa; padding: 15px; border-left: 4px solid #3498db; margin: 10px 0; border-radius: 3px; min-height: 40px; }
+        .video-container { position: relative; margin: 10px 0; }
+        video, canvas { width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 3px; }
+        .info { background: #e8f4f8; padding: 10px; border-radius: 3px; font-size: 12px; margin: 10px 0; }
+        .row { display: flex; gap: 10px; }
+        .row > * { flex: 1; }
+        @media (max-width: 600px) {
+            .row { flex-direction: column; }
+            .mode-btns { flex-direction: column; }
+            .mode-btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Sign Language Translator</h1>
+        <p>Fast AI-powered translation using Random Forest</p>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('translate')">Translate</button>
+            <button class="tab-btn" onclick="showTab('train')">Train</button>
+        </div>
+
+        <!-- TRANSLATE TAB -->
+        <div id="translate" class="tab-content active">
+            <div class="card">
+                <div class="mode-btns">
+                    <button class="mode-btn active" onclick="selectMode('text-sign')">Text → Sign</button>
+                    <button class="mode-btn" onclick="selectMode('sign-text')">Sign → Text</button>
+                </div>
+
+                <!-- Text to Sign -->
+                <div id="text-sign" class="section active">
+                    <h3>Convert Text to Sign</h3>
+                    <textarea id="textInput" placeholder="Enter text here..."></textarea>
+                    <button onclick="textToSign()">Convert</button>
+                    <div id="signOutput" class="output">Signs will appear here</div>
+                </div>
+
+                <!-- Sign to Text -->
+                <div id="sign-text" class="section">
+                    <h3>Recognize Sign Language</h3>
+                    <div class="video-container">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas" style="display:none;"></canvas>
+                    </div>
+                    <div>
+                        <button onclick="toggleCamera()">Start Camera</button>
+                        <button class="success" onclick="predictSign()">Predict</button>
+                    </div>
+                    <div id="textOutput" class="output">Recognized text will appear here</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRAIN TAB -->
+        <div id="train" class="tab-content">
+            <div class="card">
+                <h3>Train Model with Your Signs</h3>
+                
+                <div class="section">
+                    <label>Sign Name:</label>
+                    <input type="text" id="signLabel" placeholder="e.g., A, hello, goodbye...">
+                </div>
+
+                <div class="video-container">
+                    <video id="trainVideo" autoplay playsinline></video>
+                    <canvas id="trainCanvas" style="display:none;"></canvas>
+                </div>
+
+                <div class="row">
+                    <button onclick="toggleTrainCamera()">Start Camera</button>
+                    <button class="success" onclick="startRecording()">Record</button>
+                    <button class="danger" onclick="stopRecording()">Stop</button>
+                </div>
+
+                <div id="trainStatus" class="output">Ready to train</div>
+                <div id="trainProgress" class="info" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cameraStream = null;
+        let isRecording = false;
+        let trainCameraStream = null;
+
+        const API = 'http://localhost:5000/api';
+
+        function showTab(name) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(name).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function selectMode(mode) {
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.mode-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(mode).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function textToSign() {
+            const text = document.getElementById('textInput').value.trim();
+            if (!text) return alert('Enter text first');
+            const signs = text.toUpperCase().split('').filter(c => c >= 'A' && c <= 'Z').join(' - ');
+            document.getElementById('signOutput').innerHTML = signs ? `Perform: ${signs}` : 'No valid signs';
+        }
+
+        async function toggleCamera() {
+            const video = document.getElementById('video');
+            if (!cameraStream) {
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = cameraStream;
+                    event.target.textContent = 'Stop Camera';
+                } catch {
+                    alert('Camera access denied');
+                }
+            } else {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+                event.target.textContent = 'Start Camera';
+            }
+        }
+
+        async function predictSign() {
+            if (!cameraStream) return alert('Start camera first');
+            const canvas = document.getElementById('canvas');
+            const video = document.getElementById('video');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            try {
+                const res = await fetch(`${API}/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: canvas.toDataURL() })
+                });
+                const data = await res.json();
+                const result = data.success ? `${data.label} (${(data.confidence * 100).toFixed(0)}%)` : data.error;
+                document.getElementById('textOutput').textContent = result;
+            } catch (e) {
+                document.getElementById('textOutput').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function toggleTrainCamera() {
+            const video = document.getElementById('trainVideo');
+            if (!trainCameraStream) {
+                try {
+                    trainCameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = trainCameraStream;
+                    event.target.textContent = 'Stop Camera';
+                } catch {
+                    alert('Camera access denied');
+                }
+            } else {
+                trainCameraStream.getTracks().forEach(t => t.stop());
+                trainCameraStream = null;
+                event.target.textContent = 'Start Camera';
+            }
+        }
+
+        async function startRecording() {
+            const label = document.getElementById('signLabel').value.trim();
+            if (!label) return alert('Enter sign name first');
+            if (!trainCameraStream) return alert('Start camera first');
+            
+            isRecording = true;
+            let count = 0;
+            const status = document.getElementById('trainStatus');
+            status.textContent = 'Recording... (collecting samples)';
+
+            const interval = setInterval(async () => {
+                if (!isRecording) { clearInterval(interval); return; }
+                const canvas = document.getElementById('trainCanvas');
+                const video = document.getElementById('trainVideo');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                
+                try {
+                    await fetch(`${API}/record-frame`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: canvas.toDataURL(), label })
+                    });
+                    count++;
+                    status.textContent = `Recording: ${count} samples`;
+                } catch (e) {}
+            }, 100);
+        }
+
+        async function stopRecording() {
+            if (!isRecording) return;
+            isRecording = false;
+            const status = document.getElementById('trainStatus');
+            const progress = document.getElementById('trainProgress');
+            
+            status.textContent = 'Training model...';
+            progress.style.display = 'block';
+            progress.textContent = 'Training in progress (this takes 5-15 seconds)...';
+
+            try {
+                const res = await fetch(`${API}/stop-recording`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    status.textContent = `Success! Trained with ${data.frame_count} samples. Model ready to use.`;
+                    progress.textContent = 'Training complete! Go to Translate tab to test.';
+                } else {
+                    status.textContent = 'Error: ' + data.error;
+                }
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
